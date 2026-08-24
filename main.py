@@ -30,7 +30,7 @@ OUTPUT_COLUMNS = [
     "EMA9", "EMA20", "EMA50", "Distance_From_EMA9", "Distance_From_EMA20",
     "EMA_Alignment", "EMA_Slope",
     "EMA_Aligned", "EMA_Slope_Passed", "Close_Above_EMA9", "EMA9_Extension_Passed",
-    "Pullback_Passed", "Bullish_Confirmation_Passed",
+    "Pullback_Passed", "Bullish_Confirmation_Passed", "Entry_Status", "Action",
     "Volume_Ratio", "Resistance", "Distance_To_Resistance", "Setup",
     "Bullish_Candle", "Market_Filter", "Score", "Signal",
     "Trend_Passed", "RSI_Passed", "Volume_Passed", "Breakout_Passed",
@@ -331,17 +331,45 @@ class PSXScanner:
                     ema50_previous=ema50_previous,
                 )
                 ema_structure_passed = ema_aligned and ema_slope_passed
-                if not bullish_confirmation_passed:
-                    score = min(score, 89)
-                if not pullback_passed:
-                    score = min(score, 79)
-                if not ema_structure_passed:
-                    score = min(score, 69)
-                signal = strategy_module.classify_scan_signal(score)
-                if signal in {"EXCEPTIONAL_BUY", "STRONG_BUY"} and confirmation_missing:
+                raw_signal = strategy_module.classify_scan_signal(score)
+                exceptional_requirements_passed = (
+                    raw_signal == "EXCEPTIONAL_BUY"
+                    and not confirmation_missing
+                    and ema_structure_passed
+                    and pullback_passed
+                    and bullish_confirmation_passed
+                )
+                if setup == "RETEST" and resistance is not None:
+                    buy_zone_low = resistance * 0.98
+                    buy_zone_high = resistance * 1.02
+                elif setup == "BREAKOUT" and resistance is not None:
+                    buy_zone_low = resistance
+                    buy_zone_high = resistance * (1.0 + self.retest_tolerance)
+                else:
+                    buy_zone_low = buy_zone_high = None
+                inside_buy_zone = (
+                    buy_zone_low is not None
+                    and buy_zone_high is not None
+                    and buy_zone_low <= closes[-1] <= buy_zone_high
+                )
+                if exceptional_requirements_passed and inside_buy_zone:
+                    signal = "EXCEPTIONAL_BUY"
+                    entry_status, action = "READY_TO_BUY", "BUY_NOW"
+                elif exceptional_requirements_passed and buy_zone_high is not None and closes[-1] < buy_zone_low:
+                    signal = "EXCEPTIONAL_SETUP"
+                    entry_status, action = "BELOW_ENTRY_ZONE", "WAIT_FOR_ENTRY"
+                elif exceptional_requirements_passed and buy_zone_low is not None and closes[-1] > buy_zone_high:
+                    signal = "EXTENDED_WAIT"
+                    entry_status, action = "ABOVE_ENTRY_ZONE", "WAIT_FOR_PULLBACK"
+                elif raw_signal in {"EXCEPTIONAL_BUY", "STRONG_BUY"} and confirmation_missing:
                     signal = "WATCHLIST"
+                    entry_status, action = "WAITING_FOR_CONFIRMATION", "WAIT_FOR_CONFIRMATION"
+                else:
+                    signal = raw_signal
+                    entry_status, action = "SETUP_INVALID", "AVOID"
                 if not liquidity_passed:
                     signal = "ILLIQUID"
+                    entry_status, action = "SETUP_INVALID", "AVOID"
                 rows.append({
                     "Symbol": symbol,
                     "Close": closes[-1],
@@ -362,6 +390,8 @@ class PSXScanner:
                     "EMA9_Extension_Passed": ema9_extension_passed,
                     "Pullback_Passed": pullback_passed,
                     "Bullish_Confirmation_Passed": bullish_confirmation_passed,
+                    "Entry_Status": entry_status,
+                    "Action": action,
                     "Volume_Ratio": volume_ratio,
                     "Resistance": resistance,
                     "Distance_To_Resistance": distance,

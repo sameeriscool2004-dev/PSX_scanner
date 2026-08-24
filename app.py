@@ -11,7 +11,7 @@ import streamlit as st
 BASE_DIR = Path(__file__).resolve().parent
 RESULTS_PATH = BASE_DIR / "results" / "latest_scan.csv"
 METADATA_PATH = BASE_DIR / "results" / "latest_scan_metadata.json"
-SIGNALS = ["ALL", "EXCEPTIONAL_BUY", "STRONG_BUY", "WATCHLIST", "DEVELOPING"]
+SIGNALS = ["ALL", "EXCEPTIONAL_BUY", "EXCEPTIONAL_SETUP", "EXTENDED_WAIT", "STRONG_BUY", "WATCHLIST", "DEVELOPING"]
 DETAIL_COLUMNS = [
     "Close", "SMA20", "SMA50", "SMA200", "EMA9", "EMA20", "EMA50",
     "Distance_From_EMA9", "Distance_From_EMA20", "RSI", "RSI_Status", "Volume",
@@ -127,6 +127,10 @@ def enrich_results(frame: pd.DataFrame) -> pd.DataFrame:
         buy_low = row.get("Buy_Zone_Low")
         buy_high = row.get("Buy_Zone_High")
         signal = str(row.get("Signal", "NO_BUY"))
+        if signal == "EXCEPTIONAL_SETUP":
+            return pd.Series({"Technical_Signal": signal, "Entry_Status": "BELOW_ENTRY_ZONE", "Action": "WAIT_FOR_ENTRY", "Reason": "Exceptional setup confirmed; wait for price to enter the buy zone."})
+        if signal == "EXTENDED_WAIT":
+            return pd.Series({"Technical_Signal": signal, "Entry_Status": "ABOVE_ENTRY_ZONE", "Action": "WAIT_FOR_PULLBACK", "Reason": "Exceptional setup confirmed; wait for a pullback into the buy zone."})
         if setup not in {"BREAKOUT", "RETEST"}:
             status, action, reason = "SETUP_INVALID", "AVOID", "No valid breakout or retest setup."
         elif pd.isna(buy_low) or pd.isna(buy_high):
