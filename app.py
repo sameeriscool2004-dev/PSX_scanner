@@ -13,7 +13,10 @@ RESULTS_PATH = BASE_DIR / "results" / "latest_scan.csv"
 METADATA_PATH = BASE_DIR / "results" / "latest_scan_metadata.json"
 SIGNALS = ["ALL", "EXCEPTIONAL_BUY", "STRONG_BUY", "WATCHLIST", "DEVELOPING"]
 DETAIL_COLUMNS = [
-    "Close", "SMA20", "SMA50", "SMA200", "RSI", "RSI_Status", "Volume",
+    "Close", "SMA20", "SMA50", "SMA200", "EMA9", "EMA20", "EMA50",
+    "Distance_From_EMA9", "Distance_From_EMA20", "RSI", "RSI_Status", "Volume",
+    "EMA_Aligned", "EMA_Slope_Passed", "Close_Above_EMA9", "EMA9_Extension_Passed",
+    "Pullback_Passed", "Bullish_Confirmation_Passed",
     "Volume_Ratio", "Volume_Status", "Resistance", "Setup", "Bullish_Candle",
     "Liquidity_Passed", "Score", "Signal", "Conditions_Partial",
     "Conditions_Failed", "Confirmation_Missing",
@@ -163,6 +166,16 @@ def confirmation_message(row: pd.Series) -> str:
         lines.append("- RSI confirmation: RSI must be healthy, below 70")
     if "Breakout/Retest" in missing:
         lines.append("- Breakout/retest confirmation: valid BREAKOUT or RETEST required")
+    if "Pullback/Retest" in missing:
+        lines.append("- Pullback/retest confirmation: a recent RETEST is required")
+    if "Bullish Confirmation" in missing:
+        lines.append("- Bullish candle confirmation: a bullish candle must follow the pullback")
+    if "EMA Alignment" in missing or "EMA Slope" in missing:
+        lines.append("- EMA confirmation: EMA9 > EMA20 > EMA50 with EMA9 and EMA20 rising")
+    if "Close > EMA9" in missing:
+        lines.append("- Price confirmation: close must be above EMA9")
+    if "EMA Extension" in missing:
+        lines.append("- Extension confirmation: close must be within 5% above EMA9")
     if "Trend" in missing:
         lines.append("- Trend confirmation: SMA alignment required")
     if "Liquidity" in missing:
@@ -175,6 +188,8 @@ def value(row: pd.Series, column: str) -> str:
     item = row.get(column, "N/A")
     if pd.isna(item):
         return "N/A"
+    if column in {"Distance_From_EMA9", "Distance_From_EMA20"}:
+        return f"{float(item) * 100:.2f}%"
     if isinstance(item, float):
         return f"{item:.2f}"
     return str(item)
@@ -197,6 +212,8 @@ def score_breakdown(row: pd.Series) -> dict[str, str]:
     setup_points = {"BREAKOUT": 20.0, "RETEST": 20.0, "EARLY_BREAKOUT": 10.0}.get(row.get("Setup"), 0.0)
     candle_points = 10.0 if row.get("Bullish_Candle") not in (None, "NONE") else 0.0
     market_points = 5.0 if row.get("Market_Filter") == "BULLISH" else 0.0
+    ema_alignment_points = float(row.get("EMA_Alignment", 0.0))
+    ema_slope_points = float(row.get("EMA_Slope", 0.0))
     return {
         "Trend": f"{trend:.2f} / 25",
         "Price above SMAs": f"{sma_points:.2f} / 15",
@@ -205,6 +222,8 @@ def score_breakdown(row: pd.Series) -> dict[str, str]:
         "Breakout/Retest": f"{setup_points:.2f} / 20",
         "Bullish Candle": f"{candle_points:.2f} / 10",
         "Market Filter": f"{market_points:.2f} / 5",
+        "EMA Alignment": f"{ema_alignment_points:.2f} / 10",
+        "EMA Slope": f"{ema_slope_points:.2f} / 5",
     }
 
 
@@ -270,7 +289,14 @@ else:
         signal = value(row, "Technical_Signal")
         tone = "signal-hot" if signal == "EXCEPTIONAL_BUY" else "signal-strong" if signal == "STRONG_BUY" else ""
         title = f"<div class='stock-line'><span class='stock-symbol'>{value(row, 'Symbol')}</span><span class='badge'>{signal}</span><span class='stock-score'>Score {value(row, 'Score')}</span></div>"
-        summary = f"Close {value(row, 'Close')} &nbsp; | &nbsp; RSI {value(row, 'RSI')} &nbsp; | &nbsp; Volume ratio {value(row, 'Volume_Ratio')} &nbsp; | &nbsp; {value(row, 'Volume_Status')} volume &nbsp; | &nbsp; Setup {value(row, 'Setup')}"
+        summary = (
+            f"Close {value(row, 'Close')} &nbsp; | &nbsp; EMA9 {value(row, 'EMA9')} &nbsp; | &nbsp; "
+            f"EMA20 {value(row, 'EMA20')} &nbsp; | &nbsp; EMA50 {value(row, 'EMA50')} &nbsp; | &nbsp; "
+            f"Distance from EMA9 {value(row, 'Distance_From_EMA9')} &nbsp; | &nbsp; "
+            f"Distance from EMA20 {value(row, 'Distance_From_EMA20')} &nbsp; | &nbsp; "
+            f"RSI {value(row, 'RSI')} &nbsp; | &nbsp; Volume ratio {value(row, 'Volume_Ratio')} &nbsp; | &nbsp; "
+            f"{value(row, 'Volume_Status')} volume &nbsp; | &nbsp; Setup {value(row, 'Setup')}"
+        )
         with st.expander(f"{value(row, 'Symbol')}  |  {signal}  |  {value(row, 'Entry_Status')}  |  Score {value(row, 'Score')}"):
             st.markdown(f'<div class="signal {tone}">{title}<div class="stock-sub">{summary}</div></div>', unsafe_allow_html=True)
             message = confirmation_message(row)

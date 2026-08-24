@@ -18,14 +18,19 @@ except ImportError:  # pragma: no cover - fallback for lowercase package names
     import strategy as strategy_module
 
 from data import get_historical_data, get_psx_symbols
-from indicators import rsi, sma
+from indicators import ema, rsi, sma
 
 TEST_LIMIT: int | None = None
 MIN_TRADING_DAYS = 250
 MIN_AVG_VOLUME = 100_000
 MIN_AVG_VALUE_TRADED = 10_000_000
+MAX_EMA9_EXTENSION = 0.05
 OUTPUT_COLUMNS = [
     "Symbol", "Close", "SMA20", "SMA50", "SMA200", "RSI",
+    "EMA9", "EMA20", "EMA50", "Distance_From_EMA9", "Distance_From_EMA20",
+    "EMA_Alignment", "EMA_Slope",
+    "EMA_Aligned", "EMA_Slope_Passed", "Close_Above_EMA9", "EMA9_Extension_Passed",
+    "Pullback_Passed", "Bullish_Confirmation_Passed",
     "Volume_Ratio", "Resistance", "Distance_To_Resistance", "Setup",
     "Bullish_Candle", "Market_Filter", "Score", "Signal",
     "Trend_Passed", "RSI_Passed", "Volume_Passed", "Breakout_Passed",
@@ -222,6 +227,17 @@ class PSXScanner:
                 sma20 = sma(closes, 20)[-1]
                 sma50 = sma(closes, 50)[-1]
                 sma200 = sma(closes, 200)[-1]
+                ema9_values = ema(closes, 9)
+                ema20_values = ema(closes, 20)
+                ema50_values = ema(closes, 50)
+                ema9 = ema9_values[-1]
+                ema20 = ema20_values[-1]
+                ema50 = ema50_values[-1]
+                ema9_previous = ema9_values[-2]
+                ema20_previous = ema20_values[-2]
+                ema50_previous = ema50_values[-2]
+                distance_from_ema9 = (closes[-1] - ema9) / ema9
+                distance_from_ema20 = (closes[-1] - ema20) / ema20
                 rsi14 = rsi(closes, 14)[-1]
                 average_volume = sum(volumes[-20:]) / 20
                 average_value_traded = sum(
@@ -237,6 +253,12 @@ class PSXScanner:
                     retest_tolerance=self.retest_tolerance,
                 )
                 candle = strategy_module.bullish_candle(history)
+                ema_aligned = ema9 > ema20 > ema50
+                ema_slope_passed = ema9 > ema9_previous and ema20 > ema20_previous
+                close_above_ema9 = closes[-1] > ema9
+                ema9_extension_passed = 0.0 <= distance_from_ema9 <= MAX_EMA9_EXTENSION
+                pullback_passed = setup == "RETEST"
+                bullish_confirmation_passed = candle != "NONE"
                 trend_passed = sma20 is not None and sma50 is not None and sma200 is not None and sma20 > sma50 > sma200
                 rsi_passed = rsi14 is not None and 50 < rsi14 < 70
                 volume_passed = current_volume >= 1.5 * average_volume if average_volume else False
@@ -263,6 +285,12 @@ class PSXScanner:
                     "Candle": candle_passed,
                     "Market": market_passed,
                     "Liquidity": liquidity_passed,
+                    "EMA Alignment": ema_aligned,
+                    "EMA Slope": ema_slope_passed,
+                    "Close > EMA9": close_above_ema9,
+                    "EMA Extension": ema9_extension_passed,
+                    "Pullback/Retest": pullback_passed,
+                    "Bullish Confirmation": bullish_confirmation_passed,
                 }
                 partial_conditions = ["Volume"] if volume_status == "PARTIAL" else []
                 failed_conditions = [name for name, passed in conditions.items() if not passed]
@@ -272,6 +300,9 @@ class PSXScanner:
                     sma20=sma20, sma50=sma50, sma200=sma200, close=closes[-1],
                     rsi_value=rsi14, volume_ratio=volume_ratio, setup=setup,
                     bullish_candle=candle, market_filter=market_filter,
+                    ema9=ema9, ema20=ema20, ema50=ema50,
+                    ema9_previous=ema9_previous, ema20_previous=ema20_previous,
+                    ema50_previous=ema50_previous,
                 )
                 strict_confirmation = {
                     "Trend": trend_passed,
@@ -279,6 +310,12 @@ class PSXScanner:
                     "Volume": volume_ratio >= 1.5,
                     "Breakout/Retest": setup in {"BREAKOUT", "RETEST"},
                     "Liquidity": liquidity_passed,
+                    "EMA Alignment": ema_aligned,
+                    "EMA Slope": ema_slope_passed,
+                    "Close > EMA9": close_above_ema9,
+                    "EMA Extension": ema9_extension_passed,
+                    "Pullback/Retest": pullback_passed,
+                    "Bullish Confirmation": bullish_confirmation_passed,
                 }
                 confirmation_missing = [name for name, passed in strict_confirmation.items() if not passed]
                 lost_conditions = failed_conditions + [
@@ -289,7 +326,17 @@ class PSXScanner:
                     sma20=sma20, sma50=sma50, sma200=sma200, close=closes[-1],
                     rsi_value=rsi14, volume_ratio=volume_ratio, setup=setup,
                     bullish_candle=candle, market_filter=market_filter,
+                    ema9=ema9, ema20=ema20, ema50=ema50,
+                    ema9_previous=ema9_previous, ema20_previous=ema20_previous,
+                    ema50_previous=ema50_previous,
                 )
+                ema_structure_passed = ema_aligned and ema_slope_passed
+                if not bullish_confirmation_passed:
+                    score = min(score, 89)
+                if not pullback_passed:
+                    score = min(score, 79)
+                if not ema_structure_passed:
+                    score = min(score, 69)
                 signal = strategy_module.classify_scan_signal(score)
                 if signal in {"EXCEPTIONAL_BUY", "STRONG_BUY"} and confirmation_missing:
                     signal = "WATCHLIST"
@@ -302,6 +349,19 @@ class PSXScanner:
                     "SMA50": sma50,
                     "SMA200": sma200,
                     "RSI": rsi14,
+                    "EMA9": ema9,
+                    "EMA20": ema20,
+                    "EMA50": ema50,
+                    "Distance_From_EMA9": distance_from_ema9,
+                    "Distance_From_EMA20": distance_from_ema20,
+                    "EMA_Alignment": score_breakdown["EMA_Alignment"],
+                    "EMA_Slope": score_breakdown["EMA_Slope"],
+                    "EMA_Aligned": ema_aligned,
+                    "EMA_Slope_Passed": ema_slope_passed,
+                    "Close_Above_EMA9": close_above_ema9,
+                    "EMA9_Extension_Passed": ema9_extension_passed,
+                    "Pullback_Passed": pullback_passed,
+                    "Bullish_Confirmation_Passed": bullish_confirmation_passed,
                     "Volume_Ratio": volume_ratio,
                     "Resistance": resistance,
                     "Distance_To_Resistance": distance,

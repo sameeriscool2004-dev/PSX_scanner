@@ -36,6 +36,12 @@ def score_scan_components(
     setup: str,
     bullish_candle: str,
     market_filter: str,
+    ema9: float | None = None,
+    ema20: float | None = None,
+    ema50: float | None = None,
+    ema9_previous: float | None = None,
+    ema20_previous: float | None = None,
+    ema50_previous: float | None = None,
 ) -> float:
     """Calculate the scanner's weighted score on a 0-100 scale."""
     breakdown = score_scan_breakdown(
@@ -48,6 +54,12 @@ def score_scan_components(
         setup=setup,
         bullish_candle=bullish_candle,
         market_filter=market_filter,
+        ema9=ema9,
+        ema20=ema20,
+        ema50=ema50,
+        ema9_previous=ema9_previous,
+        ema20_previous=ema20_previous,
+        ema50_previous=ema50_previous,
     )
     return round(_clamp(sum(breakdown.values()), 0.0, 100.0), 2)
 
@@ -63,6 +75,12 @@ def score_scan_breakdown(
     setup: str,
     bullish_candle: str,
     market_filter: str,
+    ema9: float | None = None,
+    ema20: float | None = None,
+    ema50: float | None = None,
+    ema9_previous: float | None = None,
+    ema20_previous: float | None = None,
+    ema50_previous: float | None = None,
 ) -> dict[str, float]:
     """Return each weighted scanner score component before final rounding."""
     trend_points = 25.0 if sma20 is not None and sma50 is not None and sma200 is not None and sma20 > sma50 > sma200 else (
@@ -74,6 +92,18 @@ def score_scan_breakdown(
     setup_points = {"BREAKOUT": 20.0, "RETEST": 20.0, "EARLY_BREAKOUT": 10.0}.get(setup, 0.0)
     candle_points = 10.0 if bullish_candle != "NONE" else 0.0
     market_points = 5.0 if market_filter == "BULLISH" else 0.0
+    ema_alignment_points = 0.0
+    if None not in (ema9, ema20, ema50):
+        if ema9 > ema20 > ema50:
+            ema_alignment_points = 10.0
+        elif ema9 < ema20 < ema50:
+            ema_alignment_points = -10.0
+    ema_slope_points = 0.0
+    if None not in (ema9, ema20, ema9_previous, ema20_previous):
+        if ema9 > ema9_previous and ema20 > ema20_previous:
+            ema_slope_points = 5.0
+        elif ema9 < ema9_previous and ema20 < ema20_previous:
+            ema_slope_points = -5.0
     return {
         "Trend": trend_points,
         "SMAs": sma_points,
@@ -82,6 +112,8 @@ def score_scan_breakdown(
         "Breakout_Retest": setup_points,
         "Bullish_Candle": candle_points,
         "Market_Filter": market_points,
+        "EMA_Alignment": ema_alignment_points,
+        "EMA_Slope": ema_slope_points,
     }
 
 
