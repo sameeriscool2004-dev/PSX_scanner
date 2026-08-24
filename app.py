@@ -61,6 +61,7 @@ def load_results() -> tuple[pd.DataFrame | None, dict]:
         return None, {}
     frame = pd.read_csv(RESULTS_PATH)
     frame = enrich_results(frame)
+    frame = frame.loc[:, ~frame.columns.duplicated(keep="last")]
     metadata = {}
     if METADATA_PATH.exists():
         try:
@@ -158,13 +159,13 @@ def enrich_results(frame: pd.DataFrame) -> pd.DataFrame:
 
 def confirmation_message(row: pd.Series) -> str:
     """Format the actionable warning for a technically promising but unconfirmed row."""
-    missing = str(row.get("Confirmation_Missing", ""))
-    if row.get("Entry_Status") != "WAITING_FOR_CONFIRMATION" and not missing:
+    missing = value(row, "Confirmation_Missing", "")
+    if value(row, "Entry_Status") != "WAITING_FOR_CONFIRMATION" and not missing:
         return ""
     lines = ["**WAIT FOR CONFIRMATION**"]
     if "Volume" in missing:
         lines.append(
-            f"- Volume confirmation: 1.5x required (current volume: {float(row['Volume_Ratio']):.2f}x)"
+            f"- Volume confirmation: 1.5x required (current volume: {float(value(row, 'Volume_Ratio', '0')):.2f}x)"
         )
     if "RSI" in missing:
         lines.append("- RSI confirmation: RSI must be healthy, below 70")
@@ -188,10 +189,35 @@ def confirmation_message(row: pd.Series) -> str:
     return "\n".join(lines)
 
 
-def value(row: pd.Series, column: str) -> str:
-    item = row.get(column, "N/A")
-    if pd.isna(item):
-        return "N/A"
+def value(row: pd.Series, column: str, default: str = "N/A") -> str:
+    item = row.get(column, default)
+
+    if item is None:
+        return default
+
+    if isinstance(item, pd.Series):
+        item = item.dropna()
+        if item.empty:
+            return default
+        item = item.iloc[-1]
+
+    if isinstance(item, (list, tuple, dict, set)):
+        return str(item)
+
+    try:
+        missing = pd.isna(item)
+
+        if isinstance(missing, bool):
+            if missing:
+                return default
+
+        elif hasattr(missing, "all"):
+            if missing.all():
+                return default
+
+    except (TypeError, ValueError):
+        pass
+
     if column in {"Distance_From_EMA9", "Distance_From_EMA20"}:
         return f"{float(item) * 100:.2f}%"
     if isinstance(item, float):
@@ -306,6 +332,11 @@ else:
             message = confirmation_message(row)
             if message:
                 st.warning(message)
+            st.caption(
+                f"Entry status: {value(row, 'Entry_Status')} | "
+                f"Action: {value(row, 'Action')} | "
+                f"{value(row, 'Reason')}"
+            )
             st.markdown("**Score breakdown**")
             breakdown_cols = st.columns(2)
             for index, (component, points) in enumerate(score_breakdown(row).items()):
