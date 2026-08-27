@@ -1,9 +1,9 @@
 {
-  "scan_timestamp": "2026-08-26T09:09:51.875239+00:00",
+  "scan_timestamp": "2026-08-27T16:12:46.645328+00:00",
   "total_symbols_discovered": 742,
   "successfully_processed": 492,
   "failed": 101,
   "insufficient_history": 149,
-  "illiquid": 306,
-  "total_scan_duration": 418.25
+  "illiquid": 305,
+  "total_scan_duration": 572.01
 }
