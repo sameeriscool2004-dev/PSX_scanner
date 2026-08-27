@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "scan_timestamp": "2026-08-27T16:12:46.645328+00:00",
   "total_symbols_discovered": 742,
   "successfully_processed": 492,
@@ -6,4 +7,13 @@
   "insufficient_history": 149,
   "illiquid": 305,
   "total_scan_duration": 572.01
+=======
+  "scan_timestamp": "2026-08-26T16:44:31.034386+00:00",
+  "total_symbols_discovered": 742,
+  "successfully_processed": 489,
+  "failed": 104,
+  "insufficient_history": 149,
+  "illiquid": 304,
+  "total_scan_duration": 420.07
+>>>>>>> bdae9d5d06207682a9f0617cadb78f049c70e825
 }
