@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from abc import ABC, abstractmethod
 from datetime import date
 from typing import Any
@@ -11,10 +10,7 @@ from typing import Any
 import pandas as pd
 from urllib import error, request
 
-try:
-    from .universe import normalize_symbol
-except ImportError:
-    from universe import normalize_symbol
+from .universe import normalize_symbol
 
 
 class PSXHistoricalProvider(ABC):
@@ -36,45 +32,13 @@ class DPSHistoricalProvider(PSXHistoricalProvider):
             raise ValueError("symbol cannot be empty")
 
         url = self.base_url.format(symbol=normalized)
-        payload = None
-        last_error = None
-
-        for attempt in range(3):
-            try:
-                req = request.Request(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0"}
-                )
-
-                with request.urlopen(req, timeout=30) as response:
-                    payload = json.loads(
-                        response.read().decode("utf-8", errors="ignore")
-                    )
-
-                break
-
-            except (
-                error.URLError,
-                error.HTTPError,
-                TimeoutError,
-                ValueError,
-                json.JSONDecodeError,
-            ) as exc:
-                last_error = exc
-
-                if attempt < 2:
-                    wait_time = 2 ** attempt
-                    print(
-                        f"Retrying {normalized} "
-                        f"(attempt {attempt + 2}/3) in {wait_time}s..."
-                    )
-                    time.sleep(wait_time)
-
-        if payload is None:
+        try:
+            response = request.urlopen(request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=30)
+            payload = json.loads(response.read().decode("utf-8", errors="ignore"))
+        except (error.URLError, error.HTTPError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
             raise RuntimeError(
-                f"Unable to fetch historical data for '{normalized}' "
-                f"after 3 attempts: {url}"
-            ) from last_error
+                f"Unable to fetch historical data for '{normalized}' from the live PSX endpoint: {url}."
+            ) from exc
 
         if not isinstance(payload, dict):
             raise RuntimeError(f"Unexpected response format from PSX endpoint for '{normalized}'.")
