@@ -1,19 +1,9 @@
 {
-<<<<<<< HEAD
-  "scan_timestamp": "2026-08-29T13:09:10.465367+00:00",
+  "scan_timestamp": "2026-08-30T13:09:00.127844+00:00",
   "total_symbols_discovered": 742,
-  "successfully_processed": 485,
-  "failed": 109,
-  "insufficient_history": 148,
-  "illiquid": 296,
-  "total_scan_duration": 491.49
-=======
-  "scan_timestamp": "2026-08-30T08:59:04.008526+00:00",
-  "total_symbols_discovered": 742,
-  "successfully_processed": 492,
-  "failed": 101,
-  "insufficient_history": 149,
-  "illiquid": 300,
-  "total_scan_duration": 668.31
->>>>>>> 19c2417 (Refresh latest PSX scan results)
+  "successfully_processed": 480,
+  "failed": 119,
+  "insufficient_history": 143,
+  "illiquid": 293,
+  "total_scan_duration": 483.28
 }
